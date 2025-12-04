@@ -1,0 +1,107 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Carte des rapports comparatifs EOD2018-Pm23, par secteur de pondération (SP)</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet"
+       4/dist/leaflet.css
+
+  <style>
+    html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
+    #map { height: 180vh; }
+    .header {
+      position: absolute; z-index: 1000; left: 10px; top: 10px;
+      background: rgba(255,255,255,0.92); padding: 10px 14px; border-radius: 8px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    }
+    .header small { color: #555; }
+    .popup-content a { font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <strong>Carte des rapports (secteurs de pondération)</strong><br>
+    Cliquez sur un secteur pour ouvrir le rapport associé (nouvel onglet).<br>
+    <small>Base: <code>/reports/XXXX_rapport.html</code></small>
+  </div>
+  <div id="map"></div>
+
+  <!-- Leaflet JS -->
+  https://unpkg.com/leaflet@1.9.4/dist/leaflet.js</script>
+
+  <script>
+    // **** 1) PARAMÈTRES À ADAPTER ****
+    // Si tu publies comme "site de projet": https://<username>.github.io/<repo>/
+    // Laisse REPORT_BASE ci-dessous en relatif (plus simple).
+    const REPORT_BASE = 'reports/'; // dossier local où se trouvent les HTML
+
+    // Fonction utilitaire: obtient l'ID SP depuis properties
+    function getIdFromProps(props) {
+      // Prend SP23 si présent, sinon id_zone_tx
+      const raw = (props.SP23 ?? props.id_zone_tx ?? '').toString().trim();
+      if (!raw) return null;
+
+      // On s'assure d'avoir 4 caractères (padding à gauche si besoin)
+      // ex: "27" -> "0027"
+      const id4 = raw.padStart(4, '0').slice(-4);
+      return id4;
+    }
+
+    // **** 2) INITIALISATION DE LA CARTE ****
+    const map = L.map('map', { minZoom: 2 }).setView([45.5017, -73.5673], 8); // Montréal
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 18
+    }).addTo(map);
+
+    // **** 3) CHARGEMENT DU GEOJSON ****
+    fetch('data/units.geojson')
+      .then(resp => resp.json())
+      .then(geojson => {
+        const layer = L.geoJSON(geojson, {
+          style: feature => ({
+            color: '#0055cc',
+            weight: 1,
+            fillColor: '#66a3ff',
+            fillOpacity: 0.25
+          }),
+          onEachFeature: (feature, lyr) => {
+            const props = feature.properties || {};
+            const id4 = getIdFromProps(props);
+            const name = props.name || props.NOM || id4 || 'Unité';
+
+            // Si tu préfères stocker directement l'URL dans le GeoJSON (champ "url"), prends-le en priorité
+            const urlFromData = props.url;
+            const url = urlFromData || (id4 ? `${REPORT_BASE}${id4}_rapport.html` : null);
+
+            let html = `<div class="popup-content"><div><strong>${name}</strong></div>`;
+            if (id4) html += `<div>ID: <code>${id4}</code></div>`;
+            if (url) {
+              html += `<div>${url}Ouvrir le rapport</a></div>`;
+            } else {
+              html += `<div style="color:#900">Lien non disponible</div>`;
+            }
+            html += `</div>`;
+            lyr.bindPopup(html);
+
+            // Survol: légère mise en évidence
+            lyr.on('mouseover', () => lyr.setStyle({ fillOpacity: 0.4 }));
+            lyr.on('mouseout',  () => lyr.setStyle({ fillOpacity: 0.25 }));
+          }
+        }).addTo(map);
+
+        // Adapter la vue à l'étendue
+        try { map.fitBounds(layer.getBounds(), { padding: [20, 20] }); } catch(e){}
+      })
+      .catch(err => {
+        console.error('Erreur de chargement du GeoJSON:', err);
+        alert('Impossible de charger la couche. Vérifie le chemin et le format (EPSG:4326 recommandé).');
+      });
+  </script>
+</body>
+</html>
